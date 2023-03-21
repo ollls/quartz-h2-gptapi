@@ -16,23 +16,11 @@ import fs2.{Stream, Chunk}
 import org.typelevel.log4cats.Logger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import io.quartz.MyLogger._
-import java.net.URI
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets
 
-import software.amazon.awssdk.regions.Region
-import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider
 
-import software.amazon.awssdk.auth.credentials.AwsCredentials
-import software.amazon.awssdk.auth.credentials.AwsSessionCredentials
-
-import software.amazon.awssdk.auth.signer.Aws4Signer
-import software.amazon.awssdk.http.SdkHttpFullRequest
-import software.amazon.awssdk.http.SdkHttpMethod
-import software.amazon.awssdk.auth.signer.params.Aws4SignerParams
 
 import java.util.concurrent.ConcurrentHashMap
-import scala.jdk.CollectionConverters.MapHasAsScala //for AWS SD
+
 
 import scala.jdk.CollectionConverters.ConcurrentMapHasAsScala
 import cats.implicits._
@@ -47,7 +35,8 @@ import cats.syntax.all._
 
 object Main extends IOApp {
 
-  val CHAT_GPT_TOKEN = "YOUR_CHAT_GPT_API_KEY"
+  val CHAT_GPT_TOKEN = "YOUR_TOKEN"
+  val TIMEOUT_MS = 60000
 
   val connectionTbl =
     ConcurrentHashMap[Long, Http2ClientConnection](100).asScala
@@ -63,7 +52,7 @@ object Main extends IOApp {
     ///////////////////////////////////////
     case req @ POST -> Root / "token" =>
       for {
-        text    <- req.body
+        text    <- req.body.map( String(_))
         connOpt <- IO(connectionTbl.get(req.connId))
         _ <- IO
           .raiseError(new Exception("Cannot connect to openai"))
@@ -74,13 +63,13 @@ object Main extends IOApp {
             "gpt-3.5-turbo",
             0.7,
             messages =
-              Array(ChatGPTMessage("user", s"translate to English to Ukranian: 'Hello World'"))
+              Array(ChatGPTMessage("user", s"translate from English to Ukranian: '$text'"))
           )
         )
 
         response <- connOpt.get.doPost(
           "/v1/chat/completions",
-          fs2.Stream.chunk(Chunk.array(writeToArray(request))),
+          fs2.Stream.emits(writeToArray(request)),
           Headers().contentType(
             ContentType.JSON
           ) + ( "Authorization" -> s"Bearer $CHAT_GPT_TOKEN")
@@ -89,9 +78,6 @@ object Main extends IOApp {
 
       } yield (Response.Ok().contentType(ContentType.JSON).asText(output))
 
-    ////////////////////////////////////////
-    case req @ GET -> Root / "test" =>
-      IO(Response.Ok().asText(s"${req.connId} - ${req.streamId.toString}"))
 
   def onDisconnect(id: Long) = for {
     _ <- IO(connectionTbl.get(id).map(c => c.close()))
@@ -102,7 +88,7 @@ object Main extends IOApp {
   } yield ()
 
   def onConnect(id: Long) = for {
-    c <- QuartzH2Client.open("https://api.openai.com", ctx = ctx,incomingWindowSize = 2000000)
+    c <- QuartzH2Client.open("https://api.openai.com", TIMEOUT_MS, ctx = ctx,incomingWindowSize = 184590)
     _ <- IO(connectionTbl.put(id, c))
     _ <- Logger[IO].info(s"HttpRouteIO: https://api.openai.com open for connection Id = $id")
   } yield ()
@@ -113,7 +99,7 @@ object Main extends IOApp {
       exitCode <- new QuartzH2Server(
         "localhost",
         8443,
-        16000,
+        TIMEOUT_MS,
         ctx,
         onConnect = onConnect,
         onDisconnect = onDisconnect
