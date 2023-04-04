@@ -17,10 +17,7 @@ import org.typelevel.log4cats.Logger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import io.quartz.MyLogger._
 
-
-
 import java.util.concurrent.ConcurrentHashMap
-
 
 import scala.jdk.CollectionConverters.ConcurrentMapHasAsScala
 import cats.implicits._
@@ -36,7 +33,7 @@ import cats.syntax.all._
 object Main extends IOApp {
 
   val CHAT_GPT_TOKEN = "YOUR_TOKEN"
-  val TIMEOUT_MS = 60000
+  val TIMEOUT_MS     = 60000
 
   val connectionTbl =
     ConcurrentHashMap[Long, Http2ClientConnection](100).asScala
@@ -52,7 +49,7 @@ object Main extends IOApp {
     ///////////////////////////////////////
     case req @ POST -> Root / "token" =>
       for {
-        text    <- req.body.map( String(_))
+        text    <- req.body.map(String(_))
         connOpt <- IO(connectionTbl.get(req.connId))
         _ <- IO
           .raiseError(new Exception("Cannot connect to openai"))
@@ -62,8 +59,7 @@ object Main extends IOApp {
           ChatGPTAPIRequest(
             "gpt-3.5-turbo",
             0.7,
-            messages =
-              Array(ChatGPTMessage("user", s"translate from English to Ukranian: '$text'"))
+            messages = Array(ChatGPTMessage("user", s"translate from English to Ukranian: '$text'"))
           )
         )
 
@@ -72,12 +68,11 @@ object Main extends IOApp {
           fs2.Stream.emits(writeToArray(request)),
           Headers().contentType(
             ContentType.JSON
-          ) + ( "Authorization" -> s"Bearer $CHAT_GPT_TOKEN")
+          ) + ("Authorization" -> s"Bearer $CHAT_GPT_TOKEN")
         )
         output <- response.bodyAsText
 
       } yield (Response.Ok().contentType(ContentType.JSON).asText(output))
-
 
   def onDisconnect(id: Long) = for {
     _ <- IO(connectionTbl.get(id).map(c => c.close()))
@@ -88,7 +83,12 @@ object Main extends IOApp {
   } yield ()
 
   def onConnect(id: Long) = for {
-    c <- QuartzH2Client.open("https://api.openai.com", TIMEOUT_MS, ctx = ctx,incomingWindowSize = 184590)
+    c <- QuartzH2Client.open(
+      "https://api.openai.com",
+      TIMEOUT_MS,
+      ctx = ctx,
+      incomingWindowSize = 184590
+    )
     _ <- IO(connectionTbl.put(id, c))
     _ <- Logger[IO].info(s"HttpRouteIO: https://api.openai.com open for connection Id = $id")
   } yield ()
