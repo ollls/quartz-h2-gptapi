@@ -22,6 +22,7 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.jdk.CollectionConverters.ConcurrentMapHasAsScala
 import cats.implicits._
 import cats.syntax.all._
+import ch.qos.logback.classic.Level
 
 //To re-generate slef-signed cert use.
 //keytool -genkey -keyalg RSA -alias selfsigned -keystore keystore.jks -storepass password -validity 360 -keysize 2048
@@ -95,6 +96,11 @@ object Main extends IOApp {
 
   def run(args: List[String]): IO[ExitCode] =
     for {
+      _ <- IO(QuartzH2Server.setLoggingLevel(Level.DEBUG))
+        .whenA(args.find(_ == "--debug").isDefined)
+      _ <- IO(QuartzH2Server.setLoggingLevel(Level.ERROR))
+        .whenA(args.find(_ == "--error").isDefined)
+      _   <- IO(QuartzH2Server.setLoggingLevel(Level.OFF)).whenA(args.find(_ == "--off").isDefined)
       ctx <- QuartzH2Server.buildSSLContext("TLS", "keystore.jks", "password")
       exitCode <- new QuartzH2Server(
         "localhost",
