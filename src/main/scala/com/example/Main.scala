@@ -33,7 +33,7 @@ import ch.qos.logback.classic.Level
 
 object Main extends IOApp {
 
-  val CHAT_GPT_TOKEN = "YOUR_TOKEN"
+  val CHAT_GPT_TOKEN = "sk-proj-.....";
   val TIMEOUT_MS     = 60000
 
   val connectionTbl =
